@@ -3,18 +3,16 @@ using circuitbreaker.example.services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-Console.WriteLine("Hello, World!");
-
 var services = new ServiceCollection();
 services.AddLogging(options =>
 {
     options.ClearProviders();
     options.AddConsole();
 });
-services.AddSingleton<WaterTreatmentPlantService>();
+services.AddSingleton<IWaterTreatmentPlantService, WaterTreatmentPlantService>();
 
 var serviceProvider = services.BuildServiceProvider();
-var waterTreatmentPlantService = serviceProvider.GetRequiredService<WaterTreatmentPlantService>();
+var waterTreatmentPlantService = serviceProvider.GetRequiredService<IWaterTreatmentPlantService>();
 
 var originsByDates = await waterTreatmentPlantService.GetOriginsByDates();
 

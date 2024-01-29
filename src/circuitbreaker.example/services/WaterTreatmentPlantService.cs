@@ -6,13 +6,13 @@ using System.Text.Json;
 
 namespace circuitbreaker.example.services
 {
-    internal class WaterTreatmentPlantService : CircuitBreakerBase
+    public class WaterTreatmentPlantService : CircuitBreakerBase, IWaterTreatmentPlantService
     {
         static HttpClient HTTP_CLIENT = new HttpClient();
 
-        public WaterTreatmentPlantService(ILogger<WaterTreatmentPlantService> logger) : 
-            base(TimeSpan.FromMinutes(1), 3, 
-                new CircuitBreakerThresold(3, TimeSpan.FromMinutes(5)), 
+        public WaterTreatmentPlantService(ILogger<WaterTreatmentPlantService> logger) :
+            base(TimeSpan.FromMinutes(1), 3,
+                new CircuitBreakerThresold(3, TimeSpan.FromMinutes(5)),
                 "WaterTreatmentPlan", logger)
         {
         }
@@ -32,7 +32,7 @@ namespace circuitbreaker.example.services
 
                 Dictionary<int, string> headers = new();
 
-                for (int i = 0;i < data[0].Length; i++) 
+                for (int i = 0; i < data[0].Length; i++)
                 {
                     var header = data[0][i];
                     var stringName = ((JsonElement)header).GetString();
