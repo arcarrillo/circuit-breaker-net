@@ -19,10 +19,44 @@ internal class CircuitBreakerStatusController(
     public CircuitBreakerStatus Status { get { CheckCurrentStatus(); return _status; } private set { _status = value; } }
     public DateTimeOffset? SetTime { get; private set; }
 
-    public FixedSizeQueue<CircuitBreakerStatusControllerRequest> _lastRequestsQueue =
+    public FixedSizeQueue<CircuitBreakerStatusControllerRequest> _lastFailedRequestsQueue =
         new FixedSizeQueue<CircuitBreakerStatusControllerRequest>(closeToOpenThresold.NumberOfFailures);
 
     int _halfOpenSuccessfulCalls = 0;
+
+    #region Public surface
+
+    public bool CanBeInvoked()
+    {
+        CheckCurrentStatus();
+        return _status != CircuitBreakerStatus.Open;
+    }
+    public void AddErrorResponse()
+    {
+        if (_status == CircuitBreakerStatus.HalfOpen)
+            SetCurrentStatus(CircuitBreakerStatus.Open);
+        else
+        {
+            _lastFailedRequestsQueue.Enqueue(CircuitBreakerStatusControllerRequest.CreateError());
+            if (ShouldMoveFromCloseToOpen())
+                SetCurrentStatus(CircuitBreakerStatus.Open);
+        }
+    }
+
+    public void CheckResponse(HttpResponseMessage responseMessage)
+    {
+        LastRequestStatusCode = responseMessage.StatusCode;
+        if (responseMessage.IsSuccessStatusCode)
+            AddSuccessfulResponse();
+        else
+            CheckErrorResponse(responseMessage);
+    }
+
+    public void Reset() => SetCurrentStatus(CircuitBreakerStatus.Close);
+
+    #endregion
+
+    #region Private surface
 
     private void SetCurrentStatus(CircuitBreakerStatus status)
     {
@@ -44,37 +78,17 @@ internal class CircuitBreakerStatusController(
             MoveToHalfOpen();
     }
 
-    public bool CanBeInvoked()
-    {
-        CheckCurrentStatus();
-        return _status != CircuitBreakerStatus.Open;
-    }
-
     private void AddSuccessfulResponse()
     {
         if (_status == CircuitBreakerStatus.HalfOpen)
             _halfOpenSuccessfulCalls++;
-        else
-            _lastRequestsQueue.Enqueue(CircuitBreakerStatusControllerRequest.CreateSuccessful());
 
         if (_halfOpenSuccessfulCalls >= halfOpenToCloseThresold)
             SetCurrentStatus(CircuitBreakerStatus.Close);
     }
 
-    private bool ShouldMoveFromCloseToOpen() => _lastRequestsQueue.Full &&
-        _lastRequestsQueue.All(it => !it.Status && it.When.Add(closeToOpenThresold.TimeThresold) >= DateTimeOffset.Now);
-
-    public void AddErrorResponse()
-    {
-        if (_status == CircuitBreakerStatus.HalfOpen)
-            SetCurrentStatus(CircuitBreakerStatus.Open);
-        else
-        {
-            _lastRequestsQueue.Enqueue(CircuitBreakerStatusControllerRequest.CreateError());
-            if (ShouldMoveFromCloseToOpen())
-                SetCurrentStatus(CircuitBreakerStatus.Open);
-        }
-    }
+    private bool ShouldMoveFromCloseToOpen() => _lastFailedRequestsQueue.Full &&
+        _lastFailedRequestsQueue.All(it => !it.Status && it.When.Add(closeToOpenThresold.TimeThresold) >= DateTimeOffset.Now);
 
     private void CheckErrorResponse(HttpResponseMessage responseMessage)
     {
@@ -84,16 +98,7 @@ internal class CircuitBreakerStatusController(
             AddErrorResponse();
     }
 
-    public void CheckResponse(HttpResponseMessage responseMessage)
-    {
-        LastRequestStatusCode = responseMessage.StatusCode;
-        if (responseMessage.IsSuccessStatusCode)
-            AddSuccessfulResponse();
-        else
-            CheckErrorResponse(responseMessage);
-    }
-
-    public void Reset() => SetCurrentStatus(CircuitBreakerStatus.Close);
+    #endregion
 
     internal class CircuitBreakerStatusControllerRequest(DateTimeOffset when, bool status)
     {
